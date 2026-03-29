@@ -5,8 +5,8 @@
 ## システム構成
 
 ```
-HC-SR501 → ESP32-WROVER → Wi-Fi → PC → MobileNetV2 → Discord
-（人感センサー）（撮影・送信）        （画像認識）  （通知）
+   HC-SR501   → ESP32-WROVER → Wi-Fi → PC → MobileNetV2 → Discord
+（人感センサー） （撮影・送信）                （画像認識）   （通知）
 ```
 
 ## 使用機材
