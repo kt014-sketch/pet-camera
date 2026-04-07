@@ -68,5 +68,6 @@ DISCORD_WEBHOOK_URL = "YOUR_DISCORD_WEBHOOK_URL"
 `start_server.bat` をダブルクリックするとサーバーが起動します。
 
 ## 更新履歴
-*ver1.1 猫・ウサギの判定の追加 / 画像の自動削除機能の追加
+
+ver1.1 猫・ウサギの判定の追加 / 画像の自動削除機能の追加
 <br>ver1.0 ペットみまもりカメラ リリース
