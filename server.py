@@ -1,14 +1,16 @@
-import socket        # TCP通信（サーバー側）
-import os             # フォルダの作成やファイル操作
-from datetime import datetime  # datetimeモジュールからdatetimeクラスを取り込み
-import torch          # PyTorch - 機械学習の計算
-from torchvision import models, transforms  # models - 学習済みモデル（MobileNetV2）, transforms - 画像の前処理
+import socket # TCP通信(サーバー側)
+import os # フォルダの作成やファイル操作
+from datetime import datetime # datetimeモジュールからdatetimeクラスを取り込み
+import torch # PyTorch - 機械学習の計算
+from torchvision import models, transforms # models - 学習済みモデル(MobileNetV2) , transforms - 画像の前処理
 from PIL import Image # 画像を開いて読み込む
-import json           # JSONデータの読み書き
+import json #JSONデータの読み書き
 import urllib.request # HTTP通信
 
 # Discord WebhookのURL
 DISCORD_WEBHOOK_URL = "YOUR_DISCORD_WEBHOOK_URL"
+
+MAX_IMAGES = 100 # imagesフォルダに保存する最大枚数
 
 os.makedirs("images", exist_ok=True) # imagesフォルダを作成. exist_ok=True - フォルダが存在してもエラーにしない
 
@@ -27,7 +29,7 @@ transform = transforms.Compose([ # Compose - 順番に実行
     transforms.ToTensor(), # 多次元配列に変換し0~1に正規化
     transforms.Normalize(
         mean=[0.485, 0.456, 0.406],
-        std=[0.229, 0.224, 0.225]  # ImageNetの平均・標準偏差で正規化
+        std=[0.229, 0.224, 0.225]   # ImageNetの平均・標準偏差で正規化
     )
 ])
 
@@ -75,11 +77,45 @@ DOG_LABELS = [
     "dhole", "african hunting dog"
 ]
 
+# ImageNetの1000クラスの中から猫種に該当するラベルをまとめたリスト
+CAT_LABELS = [
+    "tabby", "tiger cat", "persian cat", "siamese cat",
+    "egyptian cat", "cougar", "lynx", "leopard",
+    "snow leopard", "jaguar", "lion", "tiger",
+    "cheetah"
+]
 
-# 画像パスを受け取りDiscordに通知を送る関数
-def notify_discord(image_path):
+# ImageNetの1000クラスの中からウサギに該当するラベルをまとめたリスト
+RABBIT_LABELS = [
+    "angora", "hare"
+]
+
+# imagesフォルダがMAX_IMAGESを超えていたら古い順に削除する関数
+def cleanup_images():
+    files = sorted(                            # ファイル名（タイムスタンプ）で昇順ソート → 古い順になる
+        [f for f in os.listdir("images") if f.endswith(".jpg")],
+    )
+    over = len(files) - MAX_IMAGES            # 超過枚数を計算
+    if over > 0:
+        for fname in files[:over]:            # 古い順にover枚分だけ削除
+            os.remove(os.path.join("images", fname))
+            print(f"削除しました: {fname}")
+
+# 画像パスと動物種別を受け取りDiscordに通知を送る関数
+def notify_discord(image_path, animal):
     timestamp = datetime.now().strftime("%Y年%m月%d日 %H:%M:%S") # 現在時刻を取得してメッセージを作る
-    message   = f"犬を検知しました\n時刻：{timestamp}"
+
+    # 動物種別に応じてメッセージを切り替える
+    if animal == "dog":
+        label_text = "犬"
+    elif animal == "cat":
+        label_text = "猫"
+    elif animal == "rabbit":
+        label_text = "ウサギ"
+    else:
+        label_text = "動物"
+
+    message = f"{label_text}を検知しました\n時刻：{timestamp}"
 
     boundary = "----FormBoundary7MA4YWxkTrZu0gW" # 区切り文字列
 
@@ -102,7 +138,7 @@ def notify_discord(image_path):
         data=body,
         headers={
             "Content-Type": f"multipart/form-data; boundary={boundary}", # Discordに形式を伝える
-            "User-Agent":   "DiscordBot (custom, 1.0)"                   # DiscordBotを指定しCloudflareのブロックを回避
+            "User-Agent": "DiscordBot (custom, 1.0)" # DiscordBotを指定しCloudflareのブロックを回避
         },
         method="POST"
     )
@@ -112,14 +148,13 @@ def notify_discord(image_path):
         with urllib.request.urlopen(req) as res: # DiscordにHTTPリクエストを送信
             print(f"Discord通知成功 ステータス: {res.status}")
     except Exception as e:
-        print(f"Discord通知失敗: {e}")                      # エラー内容
-        print(f"詳細: {e.read().decode('utf-8')}")          # 詳細なエラー
+        print(f"Discord通知失敗: {e}") # エラー内容
+        print(f"詳細: {e.read().decode('utf-8')}") # 詳細なエラー
 
-
-# 画像パスを受け取り犬かどうか判定
+# 画像パスを受け取り犬・猫・ウサギかどうか判定
 def recognize(image_path):
-    img        = Image.open(image_path).convert("RGB") # 画像ファイルをRGBに変換
-    img_tensor = transform(img).unsqueeze(0)           # 前処理+バッチ次元の追加
+    img = Image.open(image_path).convert("RGB") # 画像ファイルをRGBに変換
+    img_tensor = transform(img).unsqueeze(0) # 前処理+バッチ次元の追加
 
     with torch.no_grad(): # 勾配計算を無効化
         output = model(img_tensor) # MobileNetV2に画像を入力して1000クラスのスコアを取得
@@ -129,32 +164,42 @@ def recognize(image_path):
     # 上位10件分のループ
     for i in indices[0]:
         label = labels[i].lower() # インデックスに対応するラベルを小文字で取得
+
         if any(dog in label for dog in DOG_LABELS): # DOG_LABELSの中のいずれかの文字列がlabelに含まれているか確認
             print(f"犬を検知しました")
-            notify_discord(image_path) # 判定された画像パスを指定
+            notify_discord(image_path, "dog")
             return "dog"
 
-    print("犬は検知されませんでした")
-    return "unknown"
+        if any(cat in label for cat in CAT_LABELS): # CAT_LABELSの中のいずれかの文字列がlabelに含まれているか確認
+            print(f"猫を検知しました")
+            notify_discord(image_path, "cat")
+            return "cat"
 
+        if any(rabbit in label for rabbit in RABBIT_LABELS): # RABBIT_LABELSの中のいずれかの文字列がlabelに含まれているか確認
+            print(f"ウサギを検知しました")
+            notify_discord(image_path, "rabbit")
+            return "rabbit"
+
+    print("ペットは検知されませんでした")
+    return "unknown"
 
 HOST = "0.0.0.0" # すべてのネットワークインターフェースで接続を受け付ける
 PORT = 8888
 
 print(f"サーバー起動中... PORT:{PORT}")
 
-server = socket.socket(socket.AF_INET, socket.SOCK_STREAM) # ソケット作成. AF_INET - IPv4, SOCK_STREAM - TCP
-server.bind((HOST, PORT))  # IPアドレスとポートの指定
-server.listen(1)           # 接続の待ち受け開始
+server = socket.socket(socket.AF_INET, socket.SOCK_STREAM) # ソケット作成. AF_INET - IPv4 , SOCK_STREAM - TCP
+server.bind((HOST, PORT)) # IPアドレスとポートの指定
+server.listen(1) # 接続の待ち受け開始
 
 print("待機中...")
 
 while True:
-    conn, addr = server.accept() # ESP32からの接続を待つ. 接続したらconn（通信オブジェクト）とaddr（IPとポートのタプル）が返る
+    conn, addr = server.accept() # ESP32からの接続を待つ. 接続したらconn(通信オブジェクト)とaddr(IPとポートのタプル)が返る
     print(f"接続: {addr}")
 
-    size_data = conn.recv(4)                        # 最初に送られてくる4バイトを受け取る
-    size      = int.from_bytes(size_data, 'little') # 4バイトを整数に変換. リトルエンディアン指定
+    size_data = conn.recv(4) # 最初に送られてくる4バイトを受け取る
+    size = int.from_bytes(size_data, 'little') # 4バイトを整数に変換. リトルエンディアン指定
 
     data = b"" # 空のバイト列
 
@@ -162,15 +207,17 @@ while True:
     while len(data) < size:
         packet = conn.recv(4096) # 1度に最大4096バイト受け取る
         if not packet:
-            break          # 受け取ったデータが空ならループ終了
-        data += packet     # 受け取ったデータを蓄積
+            break        # 受け取ったデータが空ならループ終了
+        data += packet # 受け取ったデータを蓄積
 
     filename = datetime.now().strftime("images/%Y%m%d_%H%M%S.jpg") # 現在時刻をファイル名にする
     with open(filename, "wb") as f: # wb - バイナリ書き込みモード
-        f.write(data)               # 画像データをJPEGとして保存
+        f.write(data) # 画像データをJPEGとして保存
     print(f"保存しました: {filename}")
 
-    result = recognize(filename) # 犬かどうかを判定
+    cleanup_images() # 101枚以上あれば古い順に削除
+
+    result = recognize(filename) # 犬・猫・ウサギかどうかを判定
     print(f"判定: {result}")
 
     conn.close() # 接続を閉じる
