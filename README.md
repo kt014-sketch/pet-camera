@@ -1,6 +1,6 @@
 # ペットみまもりカメラ
 
-人感センサーで犬の動きを検知し、ESP32カメラで撮影。Wi-Fi経由でPCに送信後、MobileNetV2で犬かどうかを判定し、Discordへリアルタイム通知するIoTシステム。
+人感センサーで犬の動きを検知し、ESP32カメラで撮影。Wi-Fi経由でPCに送信後、MobileNetV2で犬・猫・ウサギかどうかを判定し、Discordへリアルタイム通知するIoTシステム。
 
 ## システム構成
 
@@ -25,6 +25,13 @@
 - PyTorch / torchvision / Pillow
 - Discord Webhook
 
+## 対応動物
+| 動物 | 判定方法 |
+|---|---|
+| 犬 | MobileNetV2（ImageNet犬種ラベル） |
+| 猫 | MobileNetV2（ImageNet猫種ラベル） |
+| ウサギ | MobileNetV2（ImageNetウサギラベル） |
+
 ## LEDステータス
 
 | LED | 色 | タイミング |
@@ -32,6 +39,9 @@
 | 緑 | 点灯 | WiFi接続成功 |
 | 青 | 点灯 | センサー検知〜送信完了 |
 | 赤 | 点滅 | カメラ失敗・PC接続失敗 |
+
+## 画像の自動削除
+`images`フォルダの保存枚数が100枚を超えると、古い順に自動削除されます。
 
 ## セットアップ
 
